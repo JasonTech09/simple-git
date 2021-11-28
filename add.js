@@ -3,7 +3,7 @@ const { promisify } = require('util');
 const { stdout } = require('process');
 const { createHash } = require('crypto');
 const { pipeline } = require('stream');
-const { copyFile, rename, rm } = require('fs/promises');
+const { rename, stat, readFile, writeFile } = require('fs/promises');
 const path = require('path');
 const pipe = promisify(pipeline);
 const sha1 = createHash('sha1');
@@ -12,6 +12,15 @@ const {
     createReadStream,
     createWriteStream,
 } = require('fs');
+
+const {
+    MAIN_DIR,
+    WORKSPACE_DIR,
+    DB_PATH,
+    OBJECTS_DIR,
+} = require('./config');
+
+const DB = require('./db');
 
 async function compress(input, output) {
     const gzip = createGzip();
@@ -22,14 +31,28 @@ async function compress(input, output) {
 }
 
 async function calculateSHA(blob) {
-    const source = createReadStream(blob);
-    let contents = '';
-    source.on('data', (err, data) =>  contents += data);
-    return sha1.update(contents).digest('hex');
+    const source = await readFile(blob);
+    return sha1.update(source).digest('hex');
 }
 
 async function addToDB(fileName, fileNameHash) {
-    await rename(fileName, path.join(__dirname, '/.project/files/', fileNameHash.substring(0,2), fileNameHash.substring(2)));
+    const newPath = path.join(OBJECTS_DIR, fileNameHash.substring(0,2), fileNameHash.substring(2));
+    await rename(fileName, newPath);
+    return newPath;
+}
+
+async function saveMetaData(fileName, compressFileLocation, fileNameHash) {
+    const info = await stat(fileName);
+
+    DB({
+        name: fileName,
+        shaName: fileNameHash,
+        loc: compressFileLocation,
+        size: info.size,
+        created: info.birthtimeMs,
+        lastUpdate: info.ctimeMs,
+        updatedBy: 'TODO',
+    });
 }
 
 (async () => {
@@ -39,8 +62,10 @@ async function addToDB(fileName, fileNameHash) {
             const tempFileName = path.join(__dirname, '/', (new Date()).getTime().toString());
             await compress(file, tempFileName);
             const fileNameHash = await calculateSHA(tempFileName);
-            await addToDB(tempFileName, fileNameHash);
-            console.log(fileNameHash);
+            const compressedFileLocation = await addToDB(tempFileName, fileNameHash);
+            await saveMetaData(path.basename(file), compressedFileLocation, fileNameHash);
+            
+            console.log(`${file} -> ${fileNameHash}`);
         } catch (ex) {
             console.log(ex);
         }
