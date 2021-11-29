@@ -3,7 +3,7 @@ const { promisify } = require('util');
 const { stdout } = require('process');
 const { createHash } = require('crypto');
 const { pipeline } = require('stream');
-const { rename, stat, readFile, writeFile } = require('fs/promises');
+const { copyFile, rename, readFile, writeFile, rm } = require('fs/promises');
 const path = require('path');
 const pipe = promisify(pipeline);
 const sha1 = createHash('sha1');
@@ -41,34 +41,20 @@ async function addToDB(fileName, fileNameHash) {
     return newPath;
 }
 
-async function saveMetaData(fileName, compressFileLocation, fileNameHash) {
-    const info = await stat(fileName);
-
-    CACHE({
-        name: fileName,
-        shaName: fileNameHash,
-        loc: compressFileLocation,
-        size: info.size,
-        created: info.birthtimeMs,
-        lastUpdate: info.ctimeMs,
-        updatedBy: 'TODO',
-    });
-}
-
 (async () => {
-    const files = process.argv.slice(2);    
-    for await (let file of files) {
-        try {
-            const tempFileName = path.join(__dirname, '/', (new Date()).getTime().toString());
-            await compress(file, tempFileName);
-            const fileNameHash = await calculateSHA(tempFileName);
-            const compressedFileLocation = await addToDB(tempFileName, fileNameHash);
-            await saveMetaData(path.basename(file), compressedFileLocation, fileNameHash);
-            
-            console.log(`${file} -> ${fileNameHash}`);
-        } catch (ex) {
-            console.log(ex);
-        }
-    }
-
+    const tempFileName = path.join(__dirname, '/temp_db');
+    const tree = await CACHE();
+    tree.unshift({
+        type: 'tree',
+        created: (new Date()).getTime(),
+    });
+    await copyFile(CACHE_PATH, tempFileName);
+    const tempFileNameHash = await calculateSHA(tempFileName);
+    await compress(tempFileName, tempFileNameHash);
+    addToDB(tempFileName, tempFileNameHash);
+    rm(tempFileNameHash)
+    
+    // reset cache for new tree
+    await CACHE([]);
+    console.log('tree saved -> ', tempFileNameHash);
 })();

@@ -3,6 +3,7 @@ const { mkdir, rm, writeFile } = require('fs/promises');
 const {
     MAIN_DIR,
     WORKSPACE_DIR,
+    CACHE_PATH,
     DB_PATH,
     OBJECTS_DIR,
 } = require('./config');
@@ -33,6 +34,7 @@ async function createDir(dir) {
         return;
     }
 
+    await writeFile(CACHE_PATH, '[]');
     await writeFile(DB_PATH, '[]');
 
     for await (let idx of [0, ...seq()]) {

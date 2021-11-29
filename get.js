@@ -16,11 +16,11 @@ const {
 const {
     MAIN_DIR,
     WORKSPACE_DIR,
-    DB_PATH,
+    CACHE_PATH,
     OBJECTS_DIR,
 } = require('./config');
 
-const DB = require('./db');
+const CACHE = require('./db');
 
 async function getFileFullyQualifiedPath(fileName) {
     return path.join(OBJECTS_DIR, fileName.substring(0,2), '/', fileName.substring(2));
